@@ -1,0 +1,90 @@
+{
+  "farm": {
+    "population": 2,
+    "star_income": 0,
+    "cost": 5,
+    "required_tech": "farming"
+  },
+  "mine": {
+    "population": 2,
+    "star_income": 0,
+    "cost": 5,
+    "required_tech": "mining"
+  },
+  "lumber_hut": {
+    "population": 1,
+    "star_income": 0,
+    "cost": 2,
+    "required_tech": "forestry"
+  },
+  "sawmill": {
+    "population": 0,
+    "star_income": 0,
+    "cost": 5,
+    "required_tech": "mathematics",
+    "adjacency_bonus": {
+      "target": "lumber_hut",
+      "population": 1
+    }
+  },
+  "windmill": {
+    "population": 0,
+    "star_income": 0,
+    "cost": 5,
+    "required_tech": "farming",
+    "adjacency_bonus": {
+      "target": "farm",
+      "population": 1
+    }
+  },
+  "forge": {
+    "population": 0,
+    "star_income": 0,
+    "cost": 5,
+    "required_tech": "smithery",
+    "adjacency_bonus": {
+      "target": "mine",
+      "population": 1
+    }
+  },
+  "port": {
+    "population": 2,
+    "star_income": 0,
+    "cost": 10,
+    "required_tech": "sailing"
+  },
+  "customs_house": {
+    "population": 0,
+    "star_income": 0,
+    "cost": 5,
+    "required_tech": "trade",
+    "adjacency_bonus": {
+      "target": "port",
+      "stars": 2
+    }
+  },
+  "temple": {
+    "population": 1,
+    "star_income": 0,
+    "cost": 20,
+    "required_tech": "free_spirit"
+  },
+  "forest_temple": {
+    "population": 1,
+    "star_income": 0,
+    "cost": 15,
+    "required_tech": "spiritualism"
+  },
+  "mountain_temple": {
+    "population": 1,
+    "star_income": 0,
+    "cost": 20,
+    "required_tech": "meditation"
+  },
+  "water_temple": {
+    "population": 1,
+    "star_income": 0,
+    "cost": 20,
+    "required_tech": "aquatism"
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "bardur": {
+    "opening_sequence": [
+      "Turn 0: Upgrade capital via hunting (if 2+ animals visible)",
+      "Turn 1: Train warrior OR explorer depending on neighbor proximity",
+      "Turn 2-3: Research forestry -> lumber huts for economy"
+    ],
+    "ideal_star_income": {
+      "turn_5": 8,
+      "turn_10": 15,
+      "turn_15": 25
+    },
+    "tech_paths": {
+      "economy_focus": ["hunting", "forestry", "mathematics"],
+      "military_rush": ["hunting", "free_spirit", "chivalry"],
+      "balanced": ["hunting", "forestry", "organization", "strategy"]
+    },
+    "key_decisions": {
+      "knights_vs_catapults": "Knights if enemy has many small units; catapults if enemy has fortified cities",
+      "expand_vs_military": "Expand if no enemy contact by turn 5; military if border contact"
+    }
+  },
+  "kickoo": {
+    "opening_sequence": [
+      "Turn 0: Upgrade capital via fishing (if 2+ fish visible)",
+      "Turn 1: Train warrior, move towards coast",
+      "Turn 2: Research sailing -> ports"
+    ],
+    "ideal_star_income": {
+      "turn_5": 7,
+      "turn_10": 20,
+      "turn_15": 35
+    },
+    "tech_paths": {
+      "naval_dominance": ["fishing", "sailing", "navigation"],
+      "economy": ["fishing", "organization", "farming", "trade"]
+    }
+  },
+  "imperius": {
+    "opening_sequence": [
+      "Turn 0: Upgrade capital via organization (if 2+ fruit visible)",
+      "Turn 1: Train warrior",
+      "Turn 2-3: Strategy for early defense OR Farming for economy"
+    ]
+  },
+  "oumaji": {
+    "opening_sequence": [
+      "Turn 0: Move rider to capture nearby village",
+      "Turn 1: Train another rider",
+      "Turn 2: Capture second village, research organization or climbing"
+    ]
+  },
+  "luxidoor": {
+    "opening_sequence": [
+      "Turn 0: Move warrior, enjoy T1 capital city",
+      "Turn 1: Train warrior, research based on resources"
+    ]
+  },
+  "vengir": {
+    "opening_sequence": [
+      "Turn 0: Train swordsman",
+      "Turn 1: Move swordsman towards closest neighbor",
+      "Turn 2: Train another swordsman, research hunting if possible"
+    ]
+  }
+}
