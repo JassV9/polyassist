@@ -2,9 +2,8 @@
   "window_title": "Polytopia",
   "tesseract_cmd": "C:/Program Files/Tesseract-OCR/tesseract.exe",
   "regions": {
-    "turn": [850, 20, 100, 40],
-    "stars": [300, 20, 150, 40],
-    "score": [1500, 20, 200, 40],
+    "hud_strip": [680, 35, 280, 30],
+    "hud_labels": [680, 10, 280, 28],
     "map": [0, 80, 1920, 920]
   },
   "tile_grid": {

@@ -1,10 +1,28 @@
 import cv2
 import numpy as np
 import os
+import logging
 
 from ..state.models import UnitType, Unit, Position
 from ..config import Calibration
 from .grid_mapper import GridMapper
+from ..knowledge.tribes import tribe_knowledge
+
+logger = logging.getLogger(__name__)
+
+# HSV ranges for health bar colors
+GREEN_HP_LOWER = np.array([40, 80, 80])
+GREEN_HP_UPPER = np.array([85, 255, 255])
+RED_HP_LOWER = np.array([0, 80, 80])
+RED_HP_UPPER = np.array([10, 255, 255])
+RED_HP_LOWER2 = np.array([170, 80, 80])
+RED_HP_UPPER2 = np.array([180, 255, 255])
+
+# Minimum contiguous green/red pixels to count as a health bar
+MIN_HP_BAR_WIDTH = 6
+MIN_HP_BAR_HEIGHT = 2
+MAX_HP_BAR_HEIGHT = 8
+
 
 class UnitDetector:
     def __init__(self, calibration: Calibration, grid_mapper: GridMapper, templates_dir: str):
@@ -12,6 +30,10 @@ class UnitDetector:
         self.grid_mapper = grid_mapper
         self.templates_dir = templates_dir
         self.unit_templates = self._load_templates("units")
+        if self.unit_templates:
+            logger.info(f"Loaded {len(self.unit_templates)} unit templates")
+        else:
+            logger.info("No unit templates found -- using color-based detection only")
 
     def _load_templates(self, category: str) -> dict[str, np.ndarray]:
         templates = {}
@@ -22,56 +44,137 @@ class UnitDetector:
         for filename in os.listdir(path):
             if filename.endswith(".png"):
                 name = os.path.splitext(filename)[0]
-                templates[name] = cv2.imread(os.path.join(path, filename))
+                img = cv2.imread(os.path.join(path, filename))
+                if img is not None:
+                    templates[name] = img
         return templates
 
     def detect_units(self, frame: np.ndarray) -> list[Unit]:
+        """
+        Primary detection: scan the map for green/red health bars.
+        Each health bar indicates a unit. Fall back to template matching
+        if templates are available for type classification.
+        """
+        map_region = self.calibration.regions.get("map")
+        if not map_region:
+            logger.warning("No 'map' region in calibration")
+            return []
+
+        mx, my, mw, mh = map_region
+        map_roi = frame[my:my+mh, mx:mx+mw]
+        if map_roi.size == 0:
+            return []
+
+        hp_bars = self._find_health_bars(map_roi)
+        logger.debug(f"Found {len(hp_bars)} health bars in map")
+
         units = []
-        for gx, gy in self.grid_mapper.get_all_visible_tiles():
-            unit = self.get_unit_at(frame, gx, gy)
-            if unit:
-                units.append(unit)
+        for (hx, hy, hw, hh, health) in hp_bars:
+            abs_x = mx + hx + hw // 2
+            abs_y = my + hy + hh + 20  # unit sprite is below the HP bar
+
+            tribe = self._detect_tribe_at(map_roi, hx, hy + hh, hw)
+            unit_type = self._classify_unit(frame, abs_x, abs_y)
+
+            unit = Unit(
+                unit_type=unit_type,
+                position=Position(x=abs_x, y=abs_y),
+                owner_tribe=tribe,
+                health=health,
+            )
+            units.append(unit)
+
         return units
 
-    def get_unit_at(self, frame: np.ndarray, gx: int, gy: int) -> Unit | None:
-        px, py = self.grid_mapper.get_tile_center(gx, gy)
-        crop_size = 40
-        y1, y2 = max(0, py - crop_size), min(frame.shape[0], py + crop_size)
-        x1, x2 = max(0, px - crop_size), min(frame.shape[1], px + crop_size)
-        unit_roi = frame[y1:y2, x1:x2]
+    def _find_health_bars(self, roi: np.ndarray) -> list[tuple[int, int, int, int, float]]:
+        """
+        Scan for health bars (green and/or red horizontal strips).
+        Returns list of (x, y, w, h, health_ratio).
+        """
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-        if unit_roi.size == 0:
-            return None
+        green_mask = cv2.inRange(hsv, GREEN_HP_LOWER, GREEN_HP_UPPER)
+        red_mask1 = cv2.inRange(hsv, RED_HP_LOWER, RED_HP_UPPER)
+        red_mask2 = cv2.inRange(hsv, RED_HP_LOWER2, RED_HP_UPPER2)
+        red_mask = cv2.bitwise_or(red_mask1, red_mask2)
 
-        best_unit_type = None
-        max_val = -1.0
+        hp_mask = cv2.bitwise_or(green_mask, red_mask)
 
-        for name, template in self.unit_templates.items():
-            if template.shape[0] > unit_roi.shape[0] or template.shape[1] > unit_roi.shape[1]:
+        # Morphological cleanup: connect nearby pixels horizontally
+        kernel_h = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 1))
+        hp_mask = cv2.morphologyEx(hp_mask, cv2.MORPH_CLOSE, kernel_h)
+        hp_mask = cv2.morphologyEx(hp_mask, cv2.MORPH_OPEN,
+                                    cv2.getStructuringElement(cv2.MORPH_RECT, (3, 1)))
+
+        contours, _ = cv2.findContours(hp_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        bars = []
+        for cnt in contours:
+            x, y, w, h = cv2.boundingRect(cnt)
+
+            if w < MIN_HP_BAR_WIDTH or h < MIN_HP_BAR_HEIGHT or h > MAX_HP_BAR_HEIGHT:
                 continue
-            res = cv2.matchTemplate(unit_roi, template, cv2.TM_CCOEFF_NORMED)
-            _, current_max, _, _ = cv2.minMaxLoc(res)
-            if current_max > 0.8 and current_max > max_val:
-                max_val = current_max
-                try:
-                    best_unit_type = UnitType(name)
-                except ValueError:
-                    pass
 
-        if best_unit_type:
-            tribe = self.detect_tribe(unit_roi)
-            health = self.detect_health(unit_roi)
-            return Unit(
-                unit_type=best_unit_type,
-                position=Position(x=gx, y=gy),
-                owner_tribe=tribe,
-                health=health
-            )
-        return None
+            aspect = w / max(h, 1)
+            if aspect < 2.0:
+                continue
 
-    def detect_tribe(self, unit_roi: np.ndarray) -> str:
-        from ..knowledge.tribes import tribe_knowledge
-        hsv_roi = cv2.cvtColor(unit_roi, cv2.COLOR_BGR2HSV)
+            # Determine health ratio from green vs red pixels in this bar
+            bar_green = green_mask[y:y+h, x:x+w]
+            bar_red = red_mask[y:y+h, x:x+w]
+            green_px = cv2.countNonZero(bar_green)
+            red_px = cv2.countNonZero(bar_red)
+            total_px = green_px + red_px
+            health = green_px / max(total_px, 1)
+
+            bars.append((x, y, w, h, health))
+
+        # Deduplicate bars that are very close together (within 20px)
+        bars = self._deduplicate_bars(bars)
+        return bars
+
+    def _deduplicate_bars(self, bars: list[tuple[int, int, int, int, float]]) -> list[tuple[int, int, int, int, float]]:
+        """Remove duplicate detections that are too close together."""
+        if len(bars) <= 1:
+            return bars
+
+        bars = sorted(bars, key=lambda b: (b[1], b[0]))
+        kept = [bars[0]]
+
+        for bar in bars[1:]:
+            bx, by = bar[0], bar[1]
+            too_close = False
+            for k in kept:
+                kx, ky = k[0], k[1]
+                if abs(bx - kx) < 20 and abs(by - ky) < 15:
+                    too_close = True
+                    break
+            if not too_close:
+                kept.append(bar)
+
+        return kept
+
+    def _detect_tribe_at(self, map_roi: np.ndarray, hx: int, below_y: int, bar_w: int) -> str:
+        """
+        Identify the tribe owning a unit by checking the colored base
+        below the health bar. The base is a circular/oval colored region
+        directly under the unit sprite.
+        """
+        # Look at the region below the health bar where the unit base sits
+        base_y = below_y + 15
+        base_h = 30
+        base_x = max(0, hx - 5)
+        base_w = bar_w + 10
+
+        if (base_y + base_h > map_roi.shape[0] or
+            base_x + base_w > map_roi.shape[1]):
+            return "unknown"
+
+        base_roi = map_roi[base_y:base_y+base_h, base_x:base_x+base_w]
+        if base_roi.size == 0:
+            return "unknown"
+
+        hsv_roi = cv2.cvtColor(base_roi, cv2.COLOR_BGR2HSV)
 
         best_tribe = "unknown"
         max_pixels = 0
@@ -85,29 +188,39 @@ class UnitDetector:
                 max_pixels = count
                 best_tribe = name
 
-        return best_tribe if max_pixels > 10 else "unknown"
+        return best_tribe if max_pixels > 15 else "unknown"
 
-    def detect_health(self, unit_roi: np.ndarray) -> float:
-        # Health bar is usually a green/red bar at the top or bottom of the unit sprite.
-        # Simplified detection: look for green pixels in the ROI.
-        hsv = cv2.cvtColor(unit_roi, cv2.COLOR_BGR2HSV)
-        # Green health bar range
-        lower_green = np.array([40, 50, 50])
-        upper_green = np.array([80, 255, 255])
-        mask = cv2.inRange(hsv, lower_green, upper_green)
+    def _classify_unit(self, frame: np.ndarray, abs_x: int, abs_y: int) -> UnitType:
+        """
+        Try to classify the unit type using template matching if templates
+        are available. Falls back to WARRIOR as the default type.
+        """
+        if not self.unit_templates:
+            return UnitType.WARRIOR
 
-        # Calculate ratio of green pixels to expected bar width
-        green_pixels = cv2.countNonZero(mask)
-        if green_pixels == 0:
-            # Check for red (low health)
-            lower_red = np.array([0, 50, 50])
-            upper_red = np.array([10, 255, 255])
-            mask_red = cv2.inRange(hsv, lower_red, upper_red)
-            red_pixels = cv2.countNonZero(mask_red)
-            if red_pixels > 0:
-                return 0.1 # Very low
-            return 1.0 # No bar visible, assume full health or unit just spawned
+        crop_size = 40
+        y1 = max(0, abs_y - crop_size)
+        y2 = min(frame.shape[0], abs_y + crop_size)
+        x1 = max(0, abs_x - crop_size)
+        x2 = min(frame.shape[1], abs_x + crop_size)
+        unit_roi = frame[y1:y2, x1:x2]
 
-        # Simplified: max expected green pixels for a full bar is roughly 20-30 in a 40x40 ROI
-        ratio = min(1.0, green_pixels / 25.0)
-        return ratio
+        if unit_roi.size == 0:
+            return UnitType.WARRIOR
+
+        best_type = UnitType.WARRIOR
+        max_val = 0.7  # minimum threshold for template match
+
+        for name, template in self.unit_templates.items():
+            if template.shape[0] > unit_roi.shape[0] or template.shape[1] > unit_roi.shape[1]:
+                continue
+            res = cv2.matchTemplate(unit_roi, template, cv2.TM_CCOEFF_NORMED)
+            _, current_max, _, _ = cv2.minMaxLoc(res)
+            if current_max > max_val:
+                max_val = current_max
+                try:
+                    best_type = UnitType(name)
+                except ValueError:
+                    pass
+
+        return best_type

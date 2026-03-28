@@ -14,6 +14,7 @@ from .vision.change_detector import ChangeDetector
 from .vision.grid_mapper import GridMapper
 from .vision.tile_classifier import TileClassifier
 from .vision.unit_detector import UnitDetector
+from .vision.city_detector import CityDetector
 from .vision.tech_tree_reader import TechTreeReader
 from .state.tracker import GameStateTracker
 from .state.models import GameState, Position
@@ -44,6 +45,7 @@ class Polysistia:
         self.tile_classifier = TileClassifier(self.calibration, self.grid_mapper, templates_dir)
         self.unit_detector = UnitDetector(self.calibration, self.grid_mapper, templates_dir)
         self.tech_reader = TechTreeReader(self.calibration, templates_dir)
+        self.city_detector = CityDetector(self.calibration)
 
         self.overlay = overlay_window
         self.is_running = False
@@ -130,6 +132,7 @@ class Polysistia:
                 stats = {}
                 tiles = []
                 units = []
+                all_cities = []
                 researched_techs = []
 
                 try:
@@ -154,6 +157,12 @@ class Polysistia:
                     logger.warning(f"[{loop_count}] Unit detection failed: {e}")
 
                 try:
+                    all_cities = self.city_detector.detect_cities(frame)
+                    logger.info(f"[{loop_count}] Cities: {len(all_cities)}")
+                except Exception as e:
+                    logger.warning(f"[{loop_count}] City detection failed: {e}")
+
+                try:
                     researched_techs = self.tech_reader.get_researched_techs(frame)
                     logger.info(f"[{loop_count}] Techs: {researched_techs}")
                 except Exception as e:
@@ -162,17 +171,27 @@ class Polysistia:
                 turn_val = int(stats.get("turn", "0") or "0")
                 stars_val = int(stats.get("stars", "0") or "0")
                 score_val = int(stats.get("score", "0") or "0")
+                star_income_val = int(stats.get("star_income", "0") or "0")
+
+                # Split cities into player-owned and enemy-owned
+                player_tribe = "bardur"
+                player_cities = [c for c in all_cities if c.owner_tribe == player_tribe]
+                enemy_cities = [c for c in all_cities if c.owner_tribe != player_tribe]
+
+                # Split units into player and enemy by tribe
+                player_units = [u for u in units if u.owner_tribe == player_tribe or u.owner_tribe == "unknown"]
+                enemy_units = [u for u in units if u.owner_tribe != player_tribe and u.owner_tribe != "unknown"]
 
                 raw_state = GameState(
                     turn=turn_val,
                     stars=stars_val,
-                    star_income=0,
+                    star_income=star_income_val,
                     score=score_val,
-                    player_tribe="bardur",
-                    cities=[],
-                    units=units,
-                    enemy_units=[],
-                    enemy_cities=[],
+                    player_tribe=player_tribe,
+                    cities=player_cities,
+                    units=player_units,
+                    enemy_units=enemy_units,
+                    enemy_cities=enemy_cities,
                     visible_tiles=tiles,
                     fog_tiles=[],
                     researched_techs=researched_techs,
@@ -182,7 +201,9 @@ class Polysistia:
 
                 logger.info(
                     f"[{loop_count}] State: turn={turn_val} stars={stars_val} "
-                    f"score={score_val} tiles={len(tiles)} units={len(units)}"
+                    f"income={star_income_val} score={score_val} "
+                    f"tiles={len(tiles)} units={len(player_units)}+{len(enemy_units)}e "
+                    f"cities={len(player_cities)}+{len(enemy_cities)}e"
                 )
 
                 current_state = self.tracker.update(raw_state)

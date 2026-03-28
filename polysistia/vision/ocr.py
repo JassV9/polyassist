@@ -27,23 +27,77 @@ class OCR:
         text = pytesseract.image_to_string(processed_roi, config=config).strip()
         return text if text else None
 
-    def _preprocess(self, image: np.ndarray) -> np.ndarray:
+    def extract_text_multi_strategy(self, frame: np.ndarray, region_name: str) -> str | None:
+        """
+        Try multiple preprocessing strategies and return the result
+        with the most digit content (best for HUD numbers).
+        """
+        if region_name not in self.calibration.regions:
+            return None
+
+        x, y, w, h = self.calibration.regions[region_name]
+        roi = frame[y:y+h, x:x+w]
+
+        best_text = None
+        best_digit_count = -1
+
+        for name, preprocessor in [
+            ("white_thresh", self._preprocess_white_threshold),
+            ("otsu", self._preprocess_otsu),
+            ("adaptive", self._preprocess_adaptive),
+        ]:
+            try:
+                processed = preprocessor(roi)
+                config = '--psm 7'
+                text = pytesseract.image_to_string(processed, config=config).strip()
+                if text:
+                    digit_count = sum(c.isdigit() for c in text)
+                    logger.debug(f"OCR strategy '{name}': '{text}' ({digit_count} digits)")
+                    if digit_count > best_digit_count:
+                        best_digit_count = digit_count
+                        best_text = text
+            except Exception as e:
+                logger.debug(f"OCR strategy '{name}' failed: {e}")
+
+        return best_text
+
+    def _preprocess_white_threshold(self, image: np.ndarray) -> np.ndarray:
+        """Fixed high threshold -- isolates white text on any background."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
+        return thresh
+
+    def _preprocess_otsu(self, image: np.ndarray) -> np.ndarray:
+        """Otsu auto-threshold -- works well on dark backgrounds."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         return thresh
 
+    def _preprocess_adaptive(self, image: np.ndarray) -> np.ndarray:
+        """Adaptive threshold -- handles varying local contrast."""
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        thresh = cv2.adaptiveThreshold(
+            gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 31, -10
+        )
+        return thresh
+
+    def _preprocess(self, image: np.ndarray) -> np.ndarray:
+        """Default preprocessing -- fixed white threshold."""
+        return self._preprocess_white_threshold(image)
+
     def extract_game_stats(self, frame: np.ndarray) -> dict[str, str]:
         """
-        Extract turn, stars, score from the HUD strip.
-        Reads the entire top HUD as one line and parses: "985 *6 4/30"
-        -> score=985, stars=6, turn=4
+        Extract turn, stars, score, and star_income from the HUD.
+        Reads the entire top HUD as one strip and parses numbers.
+        Also reads the label row to extract star income (+N).
         """
-        stats = {"turn": "0", "stars": "0", "score": "0"}
+        stats = {"turn": "0", "stars": "0", "score": "0", "star_income": "0"}
 
-        # Try single-strip HUD approach first
         if "hud_strip" in self.calibration.regions:
-            text = self.extract_text(frame, "hud_strip")
+            text = self.extract_text_multi_strategy(frame, "hud_strip")
             if text:
                 logger.debug(f"HUD strip raw: '{text}'")
                 numbers = re.findall(r'\d+', text)
@@ -57,15 +111,20 @@ class OCR:
                     stats["turn"] = numbers[1]
                 elif len(numbers) == 1:
                     stats["score"] = numbers[0]
-            return stats
 
-        # Fallback: individual region approach
-        for region in ["turn", "stars", "score"]:
-            text = self.extract_text(frame, region)
-            if text:
-                digits = "".join(filter(str.isdigit, text))
-                stats[region] = digits if digits else "0"
-            else:
-                stats[region] = "0"
+                # If we got 4+ numbers, the extra one is likely star income
+                # Pattern: "985 +4 6 4/30" or "985 *6 4 30"
+                if len(numbers) >= 4:
+                    stats["star_income"] = numbers[1]
+                    stats["stars"] = numbers[2]
+                    stats["turn"] = numbers[3]
+
+        # Also try to read the label row for star income (+N)
+        if "hud_labels" in self.calibration.regions:
+            label_text = self.extract_text_multi_strategy(frame, "hud_labels")
+            if label_text:
+                income_match = re.search(r'\+\s*(\d+)', label_text)
+                if income_match:
+                    stats["star_income"] = income_match.group(1)
 
         return stats
