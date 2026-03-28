@@ -11,7 +11,7 @@ setup(
         "pytesseract>=0.3.10",
         "Pillow>=10.0.0",
         "pywin32>=306",
-        "numpy>=1.24.0",
+        "numpy>=1.26.4,<2",
         "PyQt6>=6.5.0",
         "pydantic>=2.0.0",
         "pydantic-settings>=2.0.0",
@@ -24,5 +24,5 @@ setup(
             "polysistia=polysistia.main:main",
         ],
     },
-    python_requires=">=3.11",
+    python_requires=">=3.10",
 )
