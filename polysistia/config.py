@@ -20,6 +20,7 @@ class TileGrid(BaseModel):
 class Calibration(BaseModel):
     window_title: str = "The Battle of Polytopia"
     tesseract_cmd: str = "C:/Program Files/Tesseract-OCR/tesseract.exe"
+    player_tribe: str = "imperius"
     regions: dict[str, list[int]]
     tile_grid: TileGrid
     resolution: tuple[int, int] = (1920, 1080)

@@ -10,18 +10,20 @@ from ..knowledge.tribes import tribe_knowledge
 
 logger = logging.getLogger(__name__)
 
-# HSV ranges for health bar colors
-GREEN_HP_LOWER = np.array([40, 80, 80])
-GREEN_HP_UPPER = np.array([85, 255, 255])
-RED_HP_LOWER = np.array([0, 80, 80])
-RED_HP_UPPER = np.array([10, 255, 255])
-RED_HP_LOWER2 = np.array([170, 80, 80])
+# HSV ranges for health bar colors -- narrow ranges to avoid vegetation
+GREEN_HP_LOWER = np.array([55, 150, 150])
+GREEN_HP_UPPER = np.array([75, 255, 255])
+RED_HP_LOWER = np.array([0, 120, 120])
+RED_HP_UPPER = np.array([8, 255, 255])
+RED_HP_LOWER2 = np.array([172, 120, 120])
 RED_HP_UPPER2 = np.array([180, 255, 255])
 
-# Minimum contiguous green/red pixels to count as a health bar
-MIN_HP_BAR_WIDTH = 6
+# Health bars are thin, wide strips -- strict size constraints
+MIN_HP_BAR_WIDTH = 12
 MIN_HP_BAR_HEIGHT = 2
-MAX_HP_BAR_HEIGHT = 8
+MAX_HP_BAR_HEIGHT = 6
+MIN_HP_BAR_ASPECT = 3.0
+MIN_HP_BAR_FILL = 0.5  # at least 50% of bounding rect must be filled
 
 
 class UnitDetector:
@@ -116,7 +118,13 @@ class UnitDetector:
                 continue
 
             aspect = w / max(h, 1)
-            if aspect < 2.0:
+            if aspect < MIN_HP_BAR_ASPECT:
+                continue
+
+            # Reject sparse contours -- health bars are solid filled rectangles
+            area = cv2.contourArea(cnt)
+            fill_ratio = area / max(w * h, 1)
+            if fill_ratio < MIN_HP_BAR_FILL:
                 continue
 
             # Determine health ratio from green vs red pixels in this bar

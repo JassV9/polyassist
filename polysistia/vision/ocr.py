@@ -91,8 +91,11 @@ class OCR:
     def extract_game_stats(self, frame: np.ndarray) -> dict[str, str]:
         """
         Extract turn, stars, score, and star_income from the HUD.
-        Reads the entire top HUD as one strip and parses numbers.
-        Also reads the label row to extract star income (+N).
+
+        The HUD numbers row always shows: SCORE ★STARS TURN/MAX
+        Example: "1,440 ★11 7/30" -> score=1440, stars=11, turn=7
+
+        Star income (+N) comes from the label row above.
         """
         stats = {"turn": "0", "stars": "0", "score": "0", "star_income": "0"}
 
@@ -100,29 +103,29 @@ class OCR:
             text = self.extract_text_multi_strategy(frame, "hud_strip")
             if text:
                 logger.debug(f"HUD strip raw: '{text}'")
-                numbers = re.findall(r'\d+', text)
-                logger.debug(f"HUD numbers: {numbers}")
+                # Merge comma-separated digits (e.g. "1,440" -> "1440")
+                cleaned = re.sub(r'(\d),(\d)', r'\1\2', text)
+                numbers = re.findall(r'\d+', cleaned)
+                logger.debug(f"HUD numbers (cleaned): {numbers}")
+
+                # Pattern is always: [score, stars, turn, turn_max]
+                # "7/30" splits into two numbers; turn_max is discarded
                 if len(numbers) >= 3:
                     stats["score"] = numbers[0]
                     stats["stars"] = numbers[1]
                     stats["turn"] = numbers[2]
+                    # numbers[3] if present is turn_max, ignore it
                 elif len(numbers) == 2:
                     stats["score"] = numbers[0]
-                    stats["turn"] = numbers[1]
+                    stats["stars"] = numbers[1]
                 elif len(numbers) == 1:
                     stats["score"] = numbers[0]
 
-                # If we got 4+ numbers, the extra one is likely star income
-                # Pattern: "985 +4 6 4/30" or "985 *6 4 30"
-                if len(numbers) >= 4:
-                    stats["star_income"] = numbers[1]
-                    stats["stars"] = numbers[2]
-                    stats["turn"] = numbers[3]
-
-        # Also try to read the label row for star income (+N)
+        # Star income comes from the label row: "Score  Stars (+4)  Turn"
         if "hud_labels" in self.calibration.regions:
             label_text = self.extract_text_multi_strategy(frame, "hud_labels")
             if label_text:
+                logger.debug(f"HUD labels raw: '{label_text}'")
                 income_match = re.search(r'\+\s*(\d+)', label_text)
                 if income_match:
                     stats["star_income"] = income_match.group(1)

@@ -1,6 +1,7 @@
 {
   "window_title": "Polytopia",
   "tesseract_cmd": "C:/Program Files/Tesseract-OCR/tesseract.exe",
+  "player_tribe": "imperius",
   "regions": {
     "hud_strip": [680, 35, 280, 30],
     "hud_labels": [680, 10, 280, 28],

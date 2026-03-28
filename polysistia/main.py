@@ -174,7 +174,7 @@ class Polysistia:
                 star_income_val = int(stats.get("star_income", "0") or "0")
 
                 # Split cities into player-owned and enemy-owned
-                player_tribe = "bardur"
+                player_tribe = self.calibration.player_tribe
                 player_cities = [c for c in all_cities if c.owner_tribe == player_tribe]
                 enemy_cities = [c for c in all_cities if c.owner_tribe != player_tribe]
 
