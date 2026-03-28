@@ -1,0 +1,18 @@
+{
+  "window_title": "The Battle of Polytopia",
+  "tesseract_cmd": "C:/Program Files/Tesseract-OCR/tesseract.exe",
+  "regions": {
+    "turn": [850, 20, 100, 40],
+    "stars": [300, 20, 150, 40],
+    "score": [1500, 20, 200, 40],
+    "map": [0, 80, 1920, 920]
+  },
+  "tile_grid": {
+    "origin": [960, 540],
+    "dx": 64,
+    "dy": 56,
+    "rows": 11,
+    "cols": 11
+  },
+  "resolution": [1920, 1080]
+}

@@ -1,0 +1,153 @@
+{
+  "warrior": {
+    "attack": 2,
+    "defense": 2,
+    "movement": 1,
+    "range": 1,
+    "max_health": 10,
+    "cost": 2,
+    "skills": ["dash"],
+    "unlocked_by": null,
+    "notes": "Starting unit for all tribes"
+  },
+  "rider": {
+    "attack": 2,
+    "defense": 1,
+    "movement": 2,
+    "range": 1,
+    "max_health": 10,
+    "cost": 3,
+    "skills": ["dash", "escape"],
+    "unlocked_by": "riding"
+  },
+  "archer": {
+    "attack": 2,
+    "defense": 1,
+    "movement": 1,
+    "range": 2,
+    "max_health": 10,
+    "cost": 3,
+    "skills": ["dash"],
+    "unlocked_by": "archery"
+  },
+  "defender": {
+    "attack": 1,
+    "defense": 3,
+    "movement": 1,
+    "range": 1,
+    "max_health": 15,
+    "cost": 3,
+    "skills": ["fortify"],
+    "unlocked_by": "strategy"
+  },
+  "knight": {
+    "attack": 3.5,
+    "defense": 1,
+    "movement": 3,
+    "range": 1,
+    "max_health": 15,
+    "cost": 8,
+    "skills": ["dash", "persist", "fortify"],
+    "unlocked_by": "chivalry"
+  },
+  "catapult": {
+    "attack": 4,
+    "defense": 0,
+    "movement": 1,
+    "range": 3,
+    "max_health": 10,
+    "cost": 8,
+    "skills": [],
+    "unlocked_by": "mathematics"
+  },
+  "swordsman": {
+    "attack": 3,
+    "defense": 3,
+    "movement": 1,
+    "range": 1,
+    "max_health": 15,
+    "cost": 5,
+    "skills": ["dash", "fortify"],
+    "unlocked_by": "smithery"
+  },
+  "mind_bender": {
+    "attack": 0,
+    "defense": 1,
+    "movement": 1,
+    "range": 1,
+    "max_health": 10,
+    "cost": 5,
+    "skills": ["convert", "heal"],
+    "unlocked_by": "philosophy"
+  },
+  "giant": {
+    "attack": 5,
+    "defense": 4,
+    "movement": 1,
+    "range": 1,
+    "max_health": 40,
+    "cost": 0,
+    "skills": ["dash"],
+    "unlocked_by": null
+  },
+  "boat": {
+    "attack": 1,
+    "defense": 1,
+    "movement": 2,
+    "range": 1,
+    "max_health": 10,
+    "cost": 0,
+    "skills": ["dash"],
+    "unlocked_by": "sailing"
+  },
+  "ship": {
+    "attack": 2,
+    "defense": 2,
+    "movement": 3,
+    "range": 2,
+    "max_health": 10,
+    "cost": 5,
+    "skills": ["dash"],
+    "unlocked_by": "sailing"
+  },
+  "battleship": {
+    "attack": 4,
+    "defense": 3,
+    "movement": 3,
+    "range": 2,
+    "max_health": 10,
+    "cost": 15,
+    "skills": ["dash", "scout"],
+    "unlocked_by": "navigation"
+  },
+  "polytaur": {
+    "attack": 3,
+    "defense": 1,
+    "movement": 1,
+    "range": 1,
+    "max_health": 15,
+    "cost": 2,
+    "skills": ["dash"],
+    "unlocked_by": "enchant"
+  },
+  "gaami": {
+    "attack": 4,
+    "defense": 4,
+    "movement": 1,
+    "range": 1,
+    "max_health": 30,
+    "cost": 0,
+    "skills": ["dash", "freeze", "skate"],
+    "unlocked_by": null
+  },
+  "hexapod": {
+    "attack": 3,
+    "defense": 1,
+    "movement": 2,
+    "range": 1,
+    "max_health": 5,
+    "cost": 2,
+    "skills": ["dash", "sneak", "creep"],
+    "unlocked_by": "farming"
+  }
+}

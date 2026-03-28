@@ -1,0 +1,227 @@
+{
+  "climbing": {
+    "tier": 1,
+    "branch": "climbing",
+    "cost_formula": "1 * cities + 4",
+    "prerequisites": [],
+    "unlocks": ["mountain_movement", "mountain_defense", "see_metal"],
+    "leads_to": ["mining", "meditation"],
+    "starting_tech_of": ["xin-xi"]
+  },
+  "mining": {
+    "tier": 2,
+    "branch": "climbing",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["climbing"],
+    "unlocks": ["mine"],
+    "leads_to": ["smithery"],
+    "starting_tech_of": []
+  },
+  "meditation": {
+    "tier": 2,
+    "branch": "climbing",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["climbing"],
+    "unlocks": ["mountain_temple", "altar_of_peace"],
+    "leads_to": ["philosophy"],
+    "starting_tech_of": ["ai-mo"]
+  },
+  "smithery": {
+    "tier": 3,
+    "branch": "climbing",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["mining"],
+    "unlocks": ["forge", "swordsman"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "philosophy": {
+    "tier": 3,
+    "branch": "climbing",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["meditation"],
+    "unlocks": ["mind_bender", "literacy"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "hunting": {
+    "tier": 1,
+    "branch": "hunting",
+    "cost_formula": "1 * cities + 4",
+    "prerequisites": [],
+    "unlocks": ["harvest_animal"],
+    "leads_to": ["forestry", "archery"],
+    "starting_tech_of": ["bardur", "elyrion"]
+  },
+  "forestry": {
+    "tier": 2,
+    "branch": "hunting",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["hunting"],
+    "unlocks": ["lumber_hut", "grow_forest"],
+    "leads_to": ["mathematics"],
+    "starting_tech_of": []
+  },
+  "archery": {
+    "tier": 2,
+    "branch": "hunting",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["hunting"],
+    "unlocks": ["archer", "forest_defense"],
+    "leads_to": ["spiritualism"],
+    "starting_tech_of": ["hoodrick"]
+  },
+  "mathematics": {
+    "tier": 3,
+    "branch": "hunting",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["forestry"],
+    "unlocks": ["catapult", "sawmill"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "spiritualism": {
+    "tier": 3,
+    "branch": "hunting",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["archery"],
+    "unlocks": ["forest_temple", "archery_range"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "fishing": {
+    "tier": 1,
+    "branch": "fishing",
+    "cost_formula": "1 * cities + 4",
+    "prerequisites": [],
+    "unlocks": ["harvest_fish"],
+    "leads_to": ["sailing", "whaling"],
+    "starting_tech_of": ["kickoo"]
+  },
+  "sailing": {
+    "tier": 2,
+    "branch": "fishing",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["fishing"],
+    "unlocks": ["port", "ship"],
+    "leads_to": ["navigation"],
+    "starting_tech_of": []
+  },
+  "whaling": {
+    "tier": 2,
+    "branch": "fishing",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["fishing"],
+    "unlocks": ["harvest_whale"],
+    "leads_to": ["aquatism"],
+    "starting_tech_of": []
+  },
+  "navigation": {
+    "tier": 3,
+    "branch": "fishing",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["sailing"],
+    "unlocks": ["battleship", "ocean_movement"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "aquatism": {
+    "tier": 3,
+    "branch": "fishing",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["whaling"],
+    "unlocks": ["water_temple", "water_defense"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "riding": {
+    "tier": 1,
+    "branch": "riding",
+    "cost_formula": "1 * cities + 4",
+    "prerequisites": [],
+    "unlocks": ["rider"],
+    "leads_to": ["roads", "free_spirit"],
+    "starting_tech_of": ["oumaji"]
+  },
+  "roads": {
+    "tier": 2,
+    "branch": "riding",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["riding"],
+    "unlocks": ["road", "grand_bazaar"],
+    "leads_to": ["trade"],
+    "starting_tech_of": ["yaddak"]
+  },
+  "free_spirit": {
+    "tier": 2,
+    "branch": "riding",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["riding"],
+    "unlocks": ["disband", "temple"],
+    "leads_to": ["chivalry"],
+    "starting_tech_of": []
+  },
+  "trade": {
+    "tier": 3,
+    "branch": "riding",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["roads"],
+    "unlocks": ["customs_house"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "chivalry": {
+    "tier": 3,
+    "branch": "riding",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["free_spirit"],
+    "unlocks": ["knight", "emperor_tomb"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "organization": {
+    "tier": 1,
+    "branch": "organization",
+    "cost_formula": "1 * cities + 4",
+    "prerequisites": [],
+    "unlocks": ["harvest_fruit"],
+    "leads_to": ["farming", "strategy"],
+    "starting_tech_of": ["imperius", "zebasi"]
+  },
+  "farming": {
+    "tier": 2,
+    "branch": "organization",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["organization"],
+    "unlocks": ["farm", "windmill"],
+    "leads_to": ["construction"],
+    "starting_tech_of": []
+  },
+  "strategy": {
+    "tier": 2,
+    "branch": "organization",
+    "cost_formula": "2 * cities + 4",
+    "prerequisites": ["organization"],
+    "unlocks": ["defender", "tower_of_wisdom"],
+    "leads_to": ["diplomacy"],
+    "starting_tech_of": ["quetzali"]
+  },
+  "construction": {
+    "tier": 3,
+    "branch": "organization",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["farming"],
+    "unlocks": ["destroy", "sawmill_adj"],
+    "leads_to": [],
+    "starting_tech_of": []
+  },
+  "diplomacy": {
+    "tier": 3,
+    "branch": "organization",
+    "cost_formula": "3 * cities + 4",
+    "prerequisites": ["strategy"],
+    "unlocks": ["embassy", "peace_treaty"],
+    "leads_to": [],
+    "starting_tech_of": []
+  }
+}

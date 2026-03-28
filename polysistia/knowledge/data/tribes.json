@@ -1,0 +1,130 @@
+{
+  "xin-xi": {
+    "starting_tech": "climbing",
+    "special_units": [],
+    "color_primary_hsv": [0, 100, 100],
+    "color_range_hsv": [[0, 50, 50], [10, 100, 100]],
+    "terrain_bias": "mountain_heavy",
+    "t0_capable": false
+  },
+  "imperius": {
+    "starting_tech": "organization",
+    "special_units": [],
+    "color_primary_hsv": [210, 100, 100],
+    "color_range_hsv": [[200, 50, 50], [220, 100, 100]],
+    "terrain_bias": "balanced",
+    "t0_capable": true
+  },
+  "bardur": {
+    "starting_tech": "hunting",
+    "special_units": [],
+    "color_primary_hsv": [20, 80, 60],
+    "color_range_hsv": [[15, 50, 40], [25, 100, 80]],
+    "terrain_bias": "forest_heavy",
+    "t0_capable": true
+  },
+  "oumaji": {
+    "starting_tech": "riding",
+    "special_units": [],
+    "color_primary_hsv": [40, 100, 100],
+    "color_range_hsv": [[35, 50, 50], [45, 100, 100]],
+    "terrain_bias": "desert_heavy",
+    "t0_capable": false
+  },
+  "kickoo": {
+    "starting_tech": "fishing",
+    "special_units": [],
+    "color_primary_hsv": [180, 100, 100],
+    "color_range_hsv": [[170, 50, 50], [190, 100, 100]],
+    "terrain_bias": "water_heavy",
+    "t0_capable": true
+  },
+  "hoodrick": {
+    "starting_tech": "archery",
+    "special_units": [],
+    "color_primary_hsv": [120, 100, 100],
+    "color_range_hsv": [[110, 50, 50], [130, 100, 100]],
+    "terrain_bias": "forest_heavy",
+    "t0_capable": false
+  },
+  "luxidoor": {
+    "starting_tech": null,
+    "special_units": [],
+    "color_primary_hsv": [300, 100, 100],
+    "color_range_hsv": [[290, 50, 50], [310, 100, 100]],
+    "terrain_bias": "balanced",
+    "t0_capable": true
+  },
+  "vengir": {
+    "starting_tech": "smithery",
+    "special_units": [],
+    "color_primary_hsv": [0, 0, 20],
+    "color_range_hsv": [[0, 0, 0], [180, 20, 40]],
+    "terrain_bias": "wasteland",
+    "t0_capable": false
+  },
+  "zebasi": {
+    "starting_tech": "farming",
+    "special_units": [],
+    "color_primary_hsv": [60, 100, 100],
+    "color_range_hsv": [[50, 50, 50], [70, 100, 100]],
+    "terrain_bias": "crop_heavy",
+    "t0_capable": true
+  },
+  "ai-mo": {
+    "starting_tech": "meditation",
+    "special_units": [],
+    "color_primary_hsv": [270, 100, 100],
+    "color_range_hsv": [[260, 50, 50], [280, 100, 100]],
+    "terrain_bias": "mountain_heavy",
+    "t0_capable": false
+  },
+  "quetzali": {
+    "starting_tech": "strategy",
+    "special_units": [],
+    "color_primary_hsv": [150, 100, 100],
+    "color_range_hsv": [[140, 50, 50], [160, 100, 100]],
+    "terrain_bias": "balanced",
+    "t0_capable": false
+  },
+  "yaddak": {
+    "starting_tech": "roads",
+    "special_units": [],
+    "color_primary_hsv": [15, 100, 80],
+    "color_range_hsv": [[10, 50, 40], [20, 100, 100]],
+    "terrain_bias": "balanced",
+    "t0_capable": false
+  },
+  "aquarion": {
+    "starting_tech": null,
+    "special_units": ["amphibian", "tridention", "crab"],
+    "color_primary_hsv": [240, 100, 100],
+    "color_range_hsv": [[230, 50, 50], [250, 100, 100]],
+    "terrain_bias": "water_heavy",
+    "t0_capable": false
+  },
+  "elyrion": {
+    "starting_tech": "enchant",
+    "special_units": ["polytaur", "navalon", "dragon"],
+    "color_primary_hsv": [280, 80, 100],
+    "color_range_hsv": [[270, 40, 50], [290, 100, 100]],
+    "terrain_bias": "magic_forest",
+    "t0_capable": true
+  },
+  "polaris": {
+    "starting_tech": "frostwork",
+    "special_units": ["mooni", "gaami", "ice_fortress"],
+    "color_primary_hsv": [190, 20, 100],
+    "color_range_hsv": [[180, 0, 80], [200, 40, 100]],
+    "terrain_bias": "ice_heavy",
+    "t0_capable": false
+  },
+  "cymanti": {
+    "starting_tech": "farming",
+    "special_units": ["hexapod", "phychi", "centipede"],
+    "color_primary_hsv": [90, 100, 100],
+    "color_range_hsv": [[80, 50, 50], [100, 100, 100]],
+    "terrain_bias": "swamp_heavy",
+    "t0_capable": true
+  }
+}
