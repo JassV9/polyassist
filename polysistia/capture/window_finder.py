@@ -19,8 +19,8 @@ def find_polytopia_window(title: str = "The Battle of Polytopia") -> tuple[int, 
 
         def enum_cb(h, _):
             if win32gui.IsWindowVisible(h):
-                window_text = win32gui.GetWindowText(h)
-                if title_lower in window_text.lower():
+                window_text = win32gui.GetWindowText(h).lower()
+                if title_lower in window_text or window_text in title_lower:
                     result.append(h)
 
         win32gui.EnumWindows(enum_cb, None)

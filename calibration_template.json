@@ -1,5 +1,5 @@
 {
-  "window_title": "The Battle of Polytopia",
+  "window_title": "Polytopia",
   "tesseract_cmd": "C:/Program Files/Tesseract-OCR/tesseract.exe",
   "regions": {
     "turn": [850, 20, 100, 40],
