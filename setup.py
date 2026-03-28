@@ -5,7 +5,7 @@ setup(
     version="0.1.0",
     packages=find_packages(),
     install_requires=[
-        "dxcam>=0.4.0",
+        "dxcam>=0.3.0",
         "mss>=9.0.1",
         "opencv-python>=4.8.0",
         "pytesseract>=0.3.10",
