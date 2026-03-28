@@ -48,8 +48,8 @@ class OCR:
         for region in ["turn", "stars", "score"]:
             text = self.extract_text(frame, region)
             if text:
-                # Basic cleaning
-                stats[region] = "".join(filter(str.isdigit, text))
+                digits = "".join(filter(str.isdigit, text))
+                stats[region] = digits if digits else "0"
             else:
                 stats[region] = "0"
 

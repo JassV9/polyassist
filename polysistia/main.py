@@ -53,26 +53,41 @@ class Polysistia:
 
         try:
             while self.is_running:
+                # Wait for the game window before doing anything
+                window_rect = self.capture.find_game_window()
+                if not window_rect:
+                    logger.debug("Waiting for Polytopia window...")
+                    await asyncio.sleep(2.0)
+                    continue
+
                 frame = self.capture.grab()
+                if frame is None or frame.shape[0] <= 1:
+                    await asyncio.sleep(settings.poll_rate)
+                    continue
 
                 if not self.change_detector.has_changed(frame):
                     await asyncio.sleep(settings.poll_rate)
                     continue
 
                 # Vision extraction pipeline
-                stats = self.ocr.extract_game_stats(frame)
-                tiles = self.tile_classifier.extract_all_tiles(frame)
-                units = self.unit_detector.detect_units(frame)
-                researched_techs = self.tech_reader.get_researched_techs(frame)
+                try:
+                    stats = self.ocr.extract_game_stats(frame)
+                    tiles = self.tile_classifier.extract_all_tiles(frame)
+                    units = self.unit_detector.detect_units(frame)
+                    researched_techs = self.tech_reader.get_researched_techs(frame)
+                except Exception as e:
+                    logger.warning(f"Vision extraction error: {e}")
+                    await asyncio.sleep(settings.poll_rate)
+                    continue
 
                 # Construct raw state
                 raw_state = GameState(
-                    turn=int(stats.get("turn", 0)),
-                    stars=int(stats.get("stars", 0)),
-                    star_income=0, # OCR for income could be added
-                    score=int(stats.get("score", 0)),
-                    player_tribe="bardur", # Should be detected
-                    cities=[], # Extraction for cities
+                    turn=int(stats.get("turn", "0") or "0"),
+                    stars=int(stats.get("stars", "0") or "0"),
+                    star_income=0,
+                    score=int(stats.get("score", "0") or "0"),
+                    player_tribe="bardur",
+                    cities=[],
                     units=units,
                     enemy_units=[],
                     enemy_cities=[],
@@ -91,7 +106,7 @@ class Polysistia:
 
                 await asyncio.sleep(settings.poll_rate)
         except Exception as e:
-            logger.error(f"Error in main loop: {e}")
+            logger.error(f"Error in main loop: {e}", exc_info=True)
         finally:
             self.stop()
 
