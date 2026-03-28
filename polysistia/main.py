@@ -51,41 +51,94 @@ class Polysistia:
         logger.info("Starting Polysistia...")
         self.is_running = True
 
+        self._loop_count = 0
+        self._debug_screenshot_saved = False
+
         try:
             while self.is_running:
+                self._loop_count += 1
+
                 # Wait for the game window before doing anything
                 window_rect = self.capture.find_game_window()
                 if not window_rect:
-                    logger.debug("Waiting for Polytopia window...")
+                    if self._loop_count % 5 == 1:
+                        logger.info("Waiting for Polytopia window...")
                     await asyncio.sleep(2.0)
                     continue
 
+                logger.info(f"[Loop {self._loop_count}] Window found: {window_rect}")
+
                 frame = self.capture.grab()
                 if frame is None or frame.shape[0] <= 1:
+                    logger.warning(f"[Loop {self._loop_count}] Capture returned empty frame")
                     await asyncio.sleep(settings.poll_rate)
                     continue
 
-                if not self.change_detector.has_changed(frame):
+                logger.info(f"[Loop {self._loop_count}] Frame captured: {frame.shape} (h x w x channels)")
+
+                # Save one debug screenshot so we can inspect what was captured
+                if not self._debug_screenshot_saved:
+                    try:
+                        import cv2
+                        cv2.imwrite("debug_capture.png", frame)
+                        logger.info("Saved debug screenshot to debug_capture.png")
+                        self._debug_screenshot_saved = True
+                    except Exception as e:
+                        logger.warning(f"Could not save debug screenshot: {e}")
+
+                changed = self.change_detector.has_changed(frame)
+                if not changed:
+                    logger.debug(f"[Loop {self._loop_count}] No screen change detected, skipping")
                     await asyncio.sleep(settings.poll_rate)
                     continue
+
+                logger.info(f"[Loop {self._loop_count}] Screen change detected, running vision pipeline...")
 
                 # Vision extraction pipeline
+                stats = {}
+                tiles = []
+                units = []
+                researched_techs = []
+
                 try:
                     stats = self.ocr.extract_game_stats(frame)
-                    tiles = self.tile_classifier.extract_all_tiles(frame)
-                    units = self.unit_detector.detect_units(frame)
-                    researched_techs = self.tech_reader.get_researched_techs(frame)
+                    logger.info(f"[Loop {self._loop_count}] OCR stats: {stats}")
                 except Exception as e:
-                    logger.warning(f"Vision extraction error: {e}")
-                    await asyncio.sleep(settings.poll_rate)
-                    continue
+                    logger.warning(f"[Loop {self._loop_count}] OCR failed: {e}")
+
+                try:
+                    tiles = self.tile_classifier.extract_all_tiles(frame)
+                    tile_types = {}
+                    for t in tiles:
+                        tile_types[t.tile_type] = tile_types.get(t.tile_type, 0) + 1
+                    logger.info(f"[Loop {self._loop_count}] Tiles: {len(tiles)} total, types: {tile_types}")
+                except Exception as e:
+                    logger.warning(f"[Loop {self._loop_count}] Tile classification failed: {e}")
+
+                try:
+                    units = self.unit_detector.detect_units(frame)
+                    logger.info(f"[Loop {self._loop_count}] Units detected: {len(units)}")
+                    for u in units:
+                        logger.info(f"  -> {u.unit_type} at ({u.position.x},{u.position.y}) tribe={u.owner_tribe} hp={u.health:.1f}")
+                except Exception as e:
+                    logger.warning(f"[Loop {self._loop_count}] Unit detection failed: {e}")
+
+                try:
+                    researched_techs = self.tech_reader.get_researched_techs(frame)
+                    logger.info(f"[Loop {self._loop_count}] Techs detected: {researched_techs}")
+                except Exception as e:
+                    logger.warning(f"[Loop {self._loop_count}] Tech reading failed: {e}")
 
                 # Construct raw state
+                turn_val = int(stats.get("turn", "0") or "0")
+                stars_val = int(stats.get("stars", "0") or "0")
+                score_val = int(stats.get("score", "0") or "0")
+
                 raw_state = GameState(
-                    turn=int(stats.get("turn", "0") or "0"),
-                    stars=int(stats.get("stars", "0") or "0"),
+                    turn=turn_val,
+                    stars=stars_val,
                     star_income=0,
-                    score=int(stats.get("score", "0") or "0"),
+                    score=score_val,
                     player_tribe="bardur",
                     cities=[],
                     units=units,
@@ -97,6 +150,8 @@ class Polysistia:
                     game_mode="domination",
                     confidence=1.0
                 )
+
+                logger.info(f"[Loop {self._loop_count}] State: turn={turn_val} stars={stars_val} score={score_val} tiles={len(tiles)} units={len(units)} techs={len(researched_techs)}")
 
                 # Update persistent state
                 current_state = self.tracker.update(raw_state)

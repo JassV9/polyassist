@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     poll_rate: float = 1.0
 
     # Logging
-    log_level: str = "INFO"
+    log_level: str = "DEBUG"
 
     def load_calibration(self) -> Calibration:
         path = self.calibration_path if os.path.exists(self.calibration_path) else self.template_path
