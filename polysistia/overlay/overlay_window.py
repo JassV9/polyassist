@@ -10,12 +10,14 @@ logger = logging.getLogger(__name__)
 
 class OverlayWindow(QMainWindow):
     state_updated = pyqtSignal(object)
+    status_updated = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
         self._setup_ui()
         self.current_state = None
         self.state_updated.connect(self.update_state)
+        self.status_updated.connect(self.update_status)
 
     def _setup_ui(self):
         # Frameless, transparent, always on top, click-through
@@ -44,6 +46,9 @@ class OverlayWindow(QMainWindow):
         self.current_state = state
         summary = GameStateSerializer.to_compact_text(state)
         self.info_label.setText(summary)
+
+    def update_status(self, status: str):
+        self.info_label.setText(f"[Polysistia]\n{status}")
 
     def toggle_visibility(self):
         if self.isVisible():

@@ -8,6 +8,7 @@ from qasync import QEventLoop
 from .config import settings
 from .capture.dxcam_backend import DXCamBackend
 from .capture.mss_backend import MSSBackend
+from .capture.window_finder import is_polytopia_foreground
 from .vision.ocr import OCR
 from .vision.change_detector import ChangeDetector
 from .vision.grid_mapper import GridMapper
@@ -20,6 +21,7 @@ from .overlay.overlay_window import OverlayWindow
 from .utils.logging import setup_logging
 
 logger = setup_logging(settings.log_level)
+
 
 class Polysistia:
     def __init__(self, overlay_window: OverlayWindow):
@@ -38,7 +40,6 @@ class Polysistia:
         self.change_detector = ChangeDetector(settings.change_threshold)
         self.tracker = GameStateTracker()
 
-        # Absolute path for templates
         templates_dir = os.path.join(os.path.dirname(__file__), "vision", "templates")
         self.tile_classifier = TileClassifier(self.calibration, self.grid_mapper, templates_dir)
         self.unit_detector = UnitDetector(self.calibration, self.grid_mapper, templates_dir)
@@ -47,54 +48,85 @@ class Polysistia:
         self.overlay = overlay_window
         self.is_running = False
 
+    def _set_overlay_status(self, status: str):
+        """Update the overlay HUD with a status message."""
+        self.overlay.status_updated.emit(status)
+
     async def start(self):
         logger.info("Starting Polysistia...")
         self.is_running = True
+        self._set_overlay_status("Starting up...")
 
-        self._loop_count = 0
-        self._debug_screenshot_saved = False
+        loop_count = 0
+        debug_screenshot_saved = False
+        last_status = ""
 
         try:
             while self.is_running:
-                self._loop_count += 1
+                loop_count += 1
 
-                # Wait for the game window before doing anything
+                # Step 1: Find the game window
                 window_rect = self.capture.find_game_window()
                 if not window_rect:
-                    if self._loop_count % 5 == 1:
+                    status = "Waiting for Polytopia window...\nMake sure the game is open (not minimized)."
+                    if status != last_status:
+                        self._set_overlay_status(status)
+                        last_status = status
                         logger.info("Waiting for Polytopia window...")
                     await asyncio.sleep(2.0)
                     continue
 
-                logger.info(f"[Loop {self._loop_count}] Window found: {window_rect}")
+                # Step 2: Check if game is in foreground
+                fg = is_polytopia_foreground(self.calibration.window_title)
+                if not fg:
+                    status = (
+                        f"Window found: {window_rect[2]}x{window_rect[3]}\n"
+                        "Polytopia is NOT in foreground!\n"
+                        "Click on the game window so I can see it."
+                    )
+                    if status != last_status:
+                        self._set_overlay_status(status)
+                        last_status = status
+                        logger.info("Polytopia not in foreground, DXCam will capture wrong window")
+                    await asyncio.sleep(1.0)
+                    continue
 
+                # Step 3: Grab frame
                 frame = self.capture.grab()
                 if frame is None or frame.shape[0] <= 1:
-                    logger.warning(f"[Loop {self._loop_count}] Capture returned empty frame")
+                    self._set_overlay_status("Capture returned empty frame...")
                     await asyncio.sleep(settings.poll_rate)
                     continue
 
-                logger.info(f"[Loop {self._loop_count}] Frame captured: {frame.shape} (h x w x channels)")
-
-                # Save one debug screenshot so we can inspect what was captured
-                if not self._debug_screenshot_saved:
+                # Save first debug screenshot
+                if not debug_screenshot_saved:
                     try:
                         import cv2
                         cv2.imwrite("debug_capture.png", frame)
-                        logger.info("Saved debug screenshot to debug_capture.png")
-                        self._debug_screenshot_saved = True
+                        logger.info(f"Saved debug screenshot: {frame.shape[1]}x{frame.shape[0]}")
+                        debug_screenshot_saved = True
                     except Exception as e:
                         logger.warning(f"Could not save debug screenshot: {e}")
 
-                changed = self.change_detector.has_changed(frame)
-                if not changed:
-                    logger.debug(f"[Loop {self._loop_count}] No screen change detected, skipping")
+                # Step 4: Check for screen changes
+                if not self.change_detector.has_changed(frame):
+                    status = (
+                        f"Connected: {frame.shape[1]}x{frame.shape[0]}\n"
+                        f"Loop #{loop_count} - No change detected\n"
+                        "Watching for game updates..."
+                    )
+                    if loop_count % 10 == 0 and status != last_status:
+                        self._set_overlay_status(status)
+                        last_status = status
                     await asyncio.sleep(settings.poll_rate)
                     continue
 
-                logger.info(f"[Loop {self._loop_count}] Screen change detected, running vision pipeline...")
+                # Step 5: Run vision pipeline
+                self._set_overlay_status(
+                    f"Connected: {frame.shape[1]}x{frame.shape[0]}\n"
+                    f"Loop #{loop_count} - Analyzing..."
+                )
 
-                # Vision extraction pipeline
                 stats = {}
                 tiles = []
                 units = []
@@ -102,34 +134,31 @@ class Polysistia:
 
                 try:
                     stats = self.ocr.extract_game_stats(frame)
-                    logger.info(f"[Loop {self._loop_count}] OCR stats: {stats}")
+                    logger.info(f"[{loop_count}] OCR: {stats}")
                 except Exception as e:
-                    logger.warning(f"[Loop {self._loop_count}] OCR failed: {e}")
+                    logger.warning(f"[{loop_count}] OCR failed: {e}")
 
                 try:
                     tiles = self.tile_classifier.extract_all_tiles(frame)
                     tile_types = {}
                     for t in tiles:
-                        tile_types[t.tile_type] = tile_types.get(t.tile_type, 0) + 1
-                    logger.info(f"[Loop {self._loop_count}] Tiles: {len(tiles)} total, types: {tile_types}")
+                        tile_types[str(t.tile_type)] = tile_types.get(str(t.tile_type), 0) + 1
+                    logger.info(f"[{loop_count}] Tiles: {len(tiles)} - {tile_types}")
                 except Exception as e:
-                    logger.warning(f"[Loop {self._loop_count}] Tile classification failed: {e}")
+                    logger.warning(f"[{loop_count}] Tile classification failed: {e}")
 
                 try:
                     units = self.unit_detector.detect_units(frame)
-                    logger.info(f"[Loop {self._loop_count}] Units detected: {len(units)}")
-                    for u in units:
-                        logger.info(f"  -> {u.unit_type} at ({u.position.x},{u.position.y}) tribe={u.owner_tribe} hp={u.health:.1f}")
+                    logger.info(f"[{loop_count}] Units: {len(units)}")
                 except Exception as e:
-                    logger.warning(f"[Loop {self._loop_count}] Unit detection failed: {e}")
+                    logger.warning(f"[{loop_count}] Unit detection failed: {e}")
 
                 try:
                     researched_techs = self.tech_reader.get_researched_techs(frame)
-                    logger.info(f"[Loop {self._loop_count}] Techs detected: {researched_techs}")
+                    logger.info(f"[{loop_count}] Techs: {researched_techs}")
                 except Exception as e:
-                    logger.warning(f"[Loop {self._loop_count}] Tech reading failed: {e}")
+                    logger.warning(f"[{loop_count}] Tech reading failed: {e}")
 
-                # Construct raw state
                 turn_val = int(stats.get("turn", "0") or "0")
                 stars_val = int(stats.get("stars", "0") or "0")
                 score_val = int(stats.get("score", "0") or "0")
@@ -151,23 +180,25 @@ class Polysistia:
                     confidence=1.0
                 )
 
-                logger.info(f"[Loop {self._loop_count}] State: turn={turn_val} stars={stars_val} score={score_val} tiles={len(tiles)} units={len(units)} techs={len(researched_techs)}")
+                logger.info(
+                    f"[{loop_count}] State: turn={turn_val} stars={stars_val} "
+                    f"score={score_val} tiles={len(tiles)} units={len(units)}"
+                )
 
-                # Update persistent state
                 current_state = self.tracker.update(raw_state)
-
-                # Update overlay safely via signal
                 self.overlay.state_updated.emit(current_state)
 
                 await asyncio.sleep(settings.poll_rate)
         except Exception as e:
             logger.error(f"Error in main loop: {e}", exc_info=True)
+            self._set_overlay_status(f"ERROR: {e}")
         finally:
             self.stop()
 
     def stop(self):
         logger.info("Stopping Polysistia...")
         self.is_running = False
+
 
 def main():
     qt_app = QApplication(sys.argv)
@@ -179,7 +210,6 @@ def main():
 
     polysistia = Polysistia(overlay)
 
-    # Handle shutdown
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *args: polysistia.stop())
 
@@ -189,6 +219,7 @@ def main():
         pass
     finally:
         loop.close()
+
 
 if __name__ == "__main__":
     main()

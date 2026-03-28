@@ -1,0 +1,2 @@
+[console_scripts]
+polysistia = polysistia.main:main
