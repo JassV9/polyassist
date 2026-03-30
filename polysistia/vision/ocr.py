@@ -8,6 +8,12 @@ from ..config import Calibration
 
 logger = logging.getLogger(__name__)
 
+KNOWN_TRIBES = [
+    "xin-xi", "imperius", "bardur", "oumaji", "kickoo",
+    "hoodrick", "luxidoor", "vengir", "zebasi", "ai-mo",
+    "quetzali", "yadakk", "aquarion", "elyrion", "polaris", "cymanti",
+]
+
 
 class OCR:
     def __init__(self, calibration: Calibration):
@@ -15,16 +21,12 @@ class OCR:
         pytesseract.pytesseract.tesseract_cmd = calibration.tesseract_cmd
 
     def extract_text(self, frame: np.ndarray, region_name: str) -> str | None:
-        """Extract text from a specific calibration region."""
         if region_name not in self.calibration.regions:
             return None
-
         x, y, w, h = self.calibration.regions[region_name]
         roi = frame[y:y+h, x:x+w]
         processed_roi = self._preprocess(roi)
-
-        config = '--psm 7'
-        text = pytesseract.image_to_string(processed_roi, config=config).strip()
+        text = pytesseract.image_to_string(processed_roi, config='--oem 3 --psm 7').strip()
         return text if text else None
 
     def extract_text_multi_strategy(self, frame: np.ndarray, region_name: str) -> str | None:
@@ -48,8 +50,9 @@ class OCR:
         ]:
             try:
                 processed = preprocessor(roi)
-                config = '--psm 7'
-                text = pytesseract.image_to_string(processed, config=config).strip()
+                text = pytesseract.image_to_string(
+                    processed, config='--oem 3 --psm 7'
+                ).strip()
                 if text:
                     digit_count = sum(c.isdigit() for c in text)
                     logger.debug(f"OCR strategy '{name}': '{text}' ({digit_count} digits)")
@@ -61,22 +64,70 @@ class OCR:
 
         return best_text
 
-    def _preprocess_white_threshold(self, image: np.ndarray) -> np.ndarray:
-        """Fixed high threshold -- isolates white text on any background."""
+    def extract_text_alpha(self, frame: np.ndarray, region_name: str) -> str | None:
+        """Extract alphabetic text (for tribe names, city names)."""
+        if region_name not in self.calibration.regions:
+            return None
+        x, y, w, h = self.calibration.regions[region_name]
+        roi = frame[y:y+h, x:x+w]
+
+        best_text = None
+        best_len = 0
+
+        for thresh_val in [160, 180, 200]:
+            gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            scaled = cv2.resize(gray, None, fx=4.0, fy=4.0, interpolation=cv2.INTER_CUBIC)
+            _, thresh = cv2.threshold(scaled, thresh_val, 255, cv2.THRESH_BINARY)
+            try:
+                text = pytesseract.image_to_string(
+                    thresh, config='--oem 3 --psm 7'
+                ).strip()
+                if text and len(text) > best_len:
+                    best_len = len(text)
+                    best_text = text
+            except Exception:
+                pass
+
+        return best_text
+
+    def ocr_roi(self, roi: np.ndarray, mode: str = "alpha") -> str | None:
+        """OCR an arbitrary image ROI (not tied to a calibration region)."""
+        if roi.size == 0 or roi.shape[0] < 3 or roi.shape[1] < 5:
+            return None
+
+        best_text = None
+        best_score = -1
+
+        for scale in [3.0, 4.0]:
+            processed = self._preprocess_white_threshold(roi, scale=scale)
+            psm = '--psm 7' if mode == "alpha" else '--psm 7 -c tessedit_char_whitelist=0123456789'
+            try:
+                text = pytesseract.image_to_string(
+                    processed, config=f'--oem 3 {psm}'
+                ).strip()
+                if text:
+                    score = len(text)
+                    if score > best_score:
+                        best_score = score
+                        best_text = text
+            except Exception:
+                pass
+
+        return best_text
+
+    def _preprocess_white_threshold(self, image: np.ndarray, scale: float = 3.0) -> np.ndarray:
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        gray = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
+        gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         _, thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)
         return thresh
 
     def _preprocess_otsu(self, image: np.ndarray) -> np.ndarray:
-        """Otsu auto-threshold -- works well on dark backgrounds."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
         _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         return thresh
 
     def _preprocess_adaptive(self, image: np.ndarray) -> np.ndarray:
-        """Adaptive threshold -- handles varying local contrast."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         gray = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
         thresh = cv2.adaptiveThreshold(
@@ -85,8 +136,34 @@ class OCR:
         return thresh
 
     def _preprocess(self, image: np.ndarray) -> np.ndarray:
-        """Default preprocessing -- fixed white threshold."""
         return self._preprocess_white_threshold(image)
+
+    def detect_player_tribe(self, frame: np.ndarray) -> str | None:
+        """
+        Auto-detect the player's tribe from the bottom status bar.
+        The bar shows text like "City lvl 2 🏰 Imperius".
+        """
+        text = self.extract_text_alpha(frame, "tribe_bar")
+        if not text:
+            return None
+
+        logger.debug(f"Tribe bar raw: '{text}'")
+
+        # Clean and normalize the text
+        cleaned = text.lower().strip()
+        cleaned = re.sub(r'[^a-z\-]', ' ', cleaned)
+        words = cleaned.split()
+
+        # Match against known tribe names
+        for word in words:
+            for tribe in KNOWN_TRIBES:
+                # Fuzzy match: allow 1-2 character differences for OCR errors
+                if _fuzzy_match(word, tribe):
+                    logger.info(f"Detected player tribe: {tribe} (from '{text}')")
+                    return tribe
+
+        logger.debug(f"Could not match tribe from: {words}")
+        return None
 
     def extract_game_stats(self, frame: np.ndarray) -> dict[str, str]:
         """
@@ -103,25 +180,20 @@ class OCR:
             text = self.extract_text_multi_strategy(frame, "hud_strip")
             if text:
                 logger.debug(f"HUD strip raw: '{text}'")
-                # Merge comma-separated digits (e.g. "1,440" -> "1440")
                 cleaned = re.sub(r'(\d),(\d)', r'\1\2', text)
                 numbers = re.findall(r'\d+', cleaned)
                 logger.debug(f"HUD numbers (cleaned): {numbers}")
 
-                # Pattern is always: [score, stars, turn, turn_max]
-                # "7/30" splits into two numbers; turn_max is discarded
                 if len(numbers) >= 3:
                     stats["score"] = numbers[0]
                     stats["stars"] = numbers[1]
                     stats["turn"] = numbers[2]
-                    # numbers[3] if present is turn_max, ignore it
                 elif len(numbers) == 2:
                     stats["score"] = numbers[0]
                     stats["stars"] = numbers[1]
                 elif len(numbers) == 1:
                     stats["score"] = numbers[0]
 
-        # Star income comes from the label row: "Score  Stars (+4)  Turn"
         if "hud_labels" in self.calibration.regions:
             label_text = self.extract_text_multi_strategy(frame, "hud_labels")
             if label_text:
@@ -131,3 +203,17 @@ class OCR:
                     stats["star_income"] = income_match.group(1)
 
         return stats
+
+
+def _fuzzy_match(word: str, target: str, max_dist: int = 2) -> bool:
+    """Check if word is within edit distance max_dist of target."""
+    if word == target:
+        return True
+    if abs(len(word) - len(target)) > max_dist:
+        return False
+    # Simple character-level check: count matching characters
+    matches = sum(1 for a, b in zip(word, target) if a == b)
+    min_len = min(len(word), len(target))
+    if min_len == 0:
+        return False
+    return matches >= min_len - max_dist

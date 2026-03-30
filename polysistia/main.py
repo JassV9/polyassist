@@ -45,10 +45,11 @@ class Polysistia:
         self.tile_classifier = TileClassifier(self.calibration, self.grid_mapper, templates_dir)
         self.unit_detector = UnitDetector(self.calibration, self.grid_mapper, templates_dir)
         self.tech_reader = TechTreeReader(self.calibration, templates_dir)
-        self.city_detector = CityDetector(self.calibration)
+        self.city_detector = CityDetector(self.calibration, self.ocr)
 
         self.overlay = overlay_window
         self.is_running = False
+        self._detected_tribe = None
 
     def _set_overlay_status(self, status: str):
         """Update the overlay HUD with a status message."""
@@ -173,8 +174,19 @@ class Polysistia:
                 score_val = int(stats.get("score", "0") or "0")
                 star_income_val = int(stats.get("star_income", "0") or "0")
 
+                # Auto-detect player tribe from bottom bar (first time only)
+                if not self._detected_tribe:
+                    try:
+                        detected = self.ocr.detect_player_tribe(frame)
+                        if detected:
+                            self._detected_tribe = detected
+                            logger.info(f"Auto-detected player tribe: {detected}")
+                    except Exception as e:
+                        logger.debug(f"Tribe detection failed: {e}")
+
+                player_tribe = self._detected_tribe or self.calibration.player_tribe
+
                 # Split cities into player-owned and enemy-owned
-                player_tribe = self.calibration.player_tribe
                 player_cities = [c for c in all_cities if c.owner_tribe == player_tribe]
                 enemy_cities = [c for c in all_cities if c.owner_tribe != player_tribe]
 

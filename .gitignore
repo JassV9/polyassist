@@ -5,3 +5,4 @@ calibration.json
 .env
 .pytest_cache/
 debug_capture.png
+debug_*.png

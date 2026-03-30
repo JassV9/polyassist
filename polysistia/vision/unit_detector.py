@@ -10,20 +10,21 @@ from ..knowledge.tribes import tribe_knowledge
 
 logger = logging.getLogger(__name__)
 
-# HSV ranges for health bar colors -- narrow ranges to avoid vegetation
-GREEN_HP_LOWER = np.array([55, 150, 150])
-GREEN_HP_UPPER = np.array([75, 255, 255])
-RED_HP_LOWER = np.array([0, 120, 120])
-RED_HP_UPPER = np.array([8, 255, 255])
-RED_HP_LOWER2 = np.array([172, 120, 120])
+# HSV ranges for health bar colors -- calibrated from actual game captures
+# Actual measured health bar: HSV (56, 246, 182)
+GREEN_HP_LOWER = np.array([48, 150, 140])
+GREEN_HP_UPPER = np.array([82, 255, 255])
+RED_HP_LOWER = np.array([0, 100, 100])
+RED_HP_UPPER = np.array([10, 255, 255])
+RED_HP_LOWER2 = np.array([170, 100, 100])
 RED_HP_UPPER2 = np.array([180, 255, 255])
 
-# Health bars are thin, wide strips -- strict size constraints
-MIN_HP_BAR_WIDTH = 12
-MIN_HP_BAR_HEIGHT = 2
-MAX_HP_BAR_HEIGHT = 6
-MIN_HP_BAR_ASPECT = 3.0
-MIN_HP_BAR_FILL = 0.5  # at least 50% of bounding rect must be filled
+# Health bars: thin wide strips with strict shape constraints
+MIN_HP_BAR_WIDTH = 8
+MIN_HP_BAR_HEIGHT = 1
+MAX_HP_BAR_HEIGHT = 7
+MIN_HP_BAR_ASPECT = 2.5
+MIN_HP_BAR_FILL = 0.3
 
 
 class UnitDetector:
@@ -165,14 +166,12 @@ class UnitDetector:
     def _detect_tribe_at(self, map_roi: np.ndarray, hx: int, below_y: int, bar_w: int) -> str:
         """
         Identify the tribe owning a unit by checking the colored base
-        below the health bar. The base is a circular/oval colored region
-        directly under the unit sprite.
+        below the health bar.
         """
-        # Look at the region below the health bar where the unit base sits
-        base_y = below_y + 15
-        base_h = 30
-        base_x = max(0, hx - 5)
-        base_w = bar_w + 10
+        base_y = below_y + 10
+        base_h = 35
+        base_x = max(0, hx - 10)
+        base_w = bar_w + 20
 
         if (base_y + base_h > map_roi.shape[0] or
             base_x + base_w > map_roi.shape[1]):
@@ -184,6 +183,7 @@ class UnitDetector:
 
         hsv_roi = cv2.cvtColor(base_roi, cv2.COLOR_BGR2HSV)
 
+        # Score each tribe by pixel count within its HSV range
         best_tribe = "unknown"
         max_pixels = 0
 
@@ -196,7 +196,9 @@ class UnitDetector:
                 max_pixels = count
                 best_tribe = name
 
-        return best_tribe if max_pixels > 15 else "unknown"
+        # Require meaningful pixel count relative to ROI size
+        min_pixels = max(10, base_h * base_w * 0.03)
+        return best_tribe if max_pixels > min_pixels else "unknown"
 
     def _classify_unit(self, frame: np.ndarray, abs_x: int, abs_y: int) -> UnitType:
         """

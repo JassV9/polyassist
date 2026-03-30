@@ -1,74 +1,71 @@
 import cv2
 import numpy as np
-import pytesseract
 import re
 import logging
 
 from ..config import Calibration
 from ..state.models import City, Position
-from ..knowledge.tribes import tribe_knowledge
+from .ocr import OCR
 
 logger = logging.getLogger(__name__)
 
-# Tribe banner colors in BGR (approximate, for distance matching).
-# These are the dominant colors of the city name banners in-game.
-TRIBE_BANNER_BGR = {
-    "xin-xi": (40, 40, 200),
-    "imperius": (200, 130, 50),
-    "bardur": (50, 60, 120),
-    "oumaji": (30, 180, 220),
-    "kickoo": (180, 180, 30),
-    "hoodrick": (30, 140, 30),
-    "luxidoor": (180, 30, 180),
-    "vengir": (40, 40, 40),
-    "zebasi": (30, 200, 200),
-    "ai-mo": (180, 30, 130),
-    "quetzali": (80, 160, 50),
-    "yaddak": (30, 100, 180),
-    "aquarion": (200, 80, 30),
-    "elyrion": (180, 50, 200),
-    "polaris": (220, 220, 200),
-    "cymanti": (40, 160, 80),
+# Official tribe colors from the Polytopia wiki, converted to BGR
+TRIBE_COLORS_BGR = {
+    "xin-xi":    (0, 0, 204),       # #cc0000
+    "imperius":  (255, 0, 0),       # #0000ff
+    "bardur":    (20, 37, 53),      # #352514
+    "oumaji":    (0, 255, 255),     # #ffff00
+    "kickoo":    (0, 255, 0),       # #00ff00
+    "hoodrick":  (0, 102, 153),     # #996600
+    "luxidoor":  (214, 59, 171),    # #ab3bd6
+    "vengir":    (255, 255, 255),   # #ffffff
+    "zebasi":    (0, 153, 255),     # #ff9900
+    "ai-mo":     (170, 226, 54),    # #36e2aa
+    "quetzali":  (74, 92, 39),      # #275c4a
+    "yadakk":    (28, 35, 125),     # #7d231c
+    "aquarion":  (129, 131, 243),   # #f38381
+    "elyrion":   (153, 0, 255),     # #ff0099
+    "polaris":   (133, 161, 182),   # #b6a185
+    "cymanti":   (0, 253, 194),     # #c2fd00
 }
 
 
 class CityDetector:
     """
-    Detects cities by finding their name banners in the map area.
-    City banners are colored rectangles with white text showing the
-    city name and a star population indicator.
+    Detects cities by finding white text clusters in the map area,
+    then reading the colored background behind them to identify the tribe.
     """
 
-    def __init__(self, calibration: Calibration):
+    def __init__(self, calibration: Calibration, ocr: OCR):
         self.calibration = calibration
-        pytesseract.pytesseract.tesseract_cmd = calibration.tesseract_cmd
+        self.ocr = ocr
 
     def detect_cities(self, frame: np.ndarray) -> list[City]:
-        """Detect all city banners in the frame and return City objects."""
         map_region = self.calibration.regions.get("map")
         if not map_region:
-            logger.warning("No 'map' region in calibration, scanning full frame")
-            roi = frame
-            offset_x, offset_y = 0, 0
-        else:
-            x, y, w, h = map_region
-            roi = frame[y:y+h, x:x+w]
-            offset_x, offset_y = x, y
+            logger.warning("No 'map' region in calibration")
+            return []
 
-        banners = self._find_banners(roi)
+        mx, my, mw, mh = map_region
+        roi = frame[my:my+mh, mx:mx+mw]
+        if roi.size == 0:
+            return []
+
+        banners = self._find_text_banners(roi)
         logger.debug(f"Found {len(banners)} candidate city banners")
 
         cities = []
-        for (bx, by, bw, bh) in banners:
+        for (bx, by, bw, bh, bg_bgr) in banners:
             banner_roi = roi[by:by+bh, bx:bx+bw]
+
             name, population = self._read_banner_text(banner_roi)
             if not name:
                 continue
 
-            tribe = self._identify_tribe_from_banner(banner_roi)
+            tribe = self._match_tribe_color(bg_bgr)
 
-            abs_cx = offset_x + bx + bw // 2
-            abs_cy = offset_y + by + bh + 40  # city center is below the banner
+            abs_cx = mx + bx + bw // 2
+            abs_cy = my + by + bh + 40
 
             city = City(
                 name=name,
@@ -80,160 +77,166 @@ class CityDetector:
                 has_wall=False,
             )
             cities.append(city)
-            logger.debug(f"City detected: {name} ({tribe}) pop={population} at ({abs_cx},{abs_cy})")
+            logger.info(f"City: '{name}' ({tribe}) pop={population} at ({abs_cx},{abs_cy})")
 
         return cities
 
-    def _find_banners(self, roi: np.ndarray) -> list[tuple[int, int, int, int]]:
+    def _find_text_banners(self, roi: np.ndarray) -> list[tuple[int, int, int, int, tuple]]:
         """
-        Find city name banners by looking for colored rectangles that
-        contain white text. Returns list of (x, y, w, h) bounding boxes.
+        Find city banners by looking for clusters of white text pixels
+        that have a colored (non-terrain) background behind them.
+        Returns list of (x, y, w, h, bg_bgr_tuple).
         """
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-        # City banners are saturated colored rectangles.
-        # They typically have saturation > 40 and value > 60.
-        # We also detect dark banners (Vengir) with low saturation but distinct shape.
-        sat_mask = cv2.inRange(hsv, np.array([0, 40, 60]), np.array([180, 255, 255]))
+        # Step 1: Find bright white pixels (banner text is white)
+        white_mask = (gray > 220).astype(np.uint8) * 255
 
-        # Also include dark regions for tribes like Vengir
-        dark_mask = cv2.inRange(hsv, np.array([0, 0, 20]), np.array([180, 30, 80]))
-        combined_mask = cv2.bitwise_or(sat_mask, dark_mask)
+        # Step 2: Group white pixels into text-like clusters
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (8, 4))
+        text_groups = cv2.morphologyEx(white_mask, cv2.MORPH_CLOSE, kernel)
+        kernel_open = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 2))
+        text_groups = cv2.morphologyEx(text_groups, cv2.MORPH_OPEN, kernel_open)
 
-        # Clean up with morphological operations
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 5))
-        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_CLOSE, kernel)
-        combined_mask = cv2.morphologyEx(combined_mask, cv2.MORPH_OPEN, kernel)
-
-        contours, _ = cv2.findContours(combined_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(text_groups, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
         banners = []
-        frame_h, frame_w = roi.shape[:2]
-
         for cnt in contours:
             x, y, w, h = cv2.boundingRect(cnt)
 
-            # City banners have a specific aspect ratio: wide and short
+            # City name banners: 50-180px wide, 10-25px tall
+            if w < 45 or w > 200 or h < 8 or h > 30:
+                continue
+
             aspect = w / max(h, 1)
-            if aspect < 2.0 or aspect > 10.0:
+            if aspect < 2.0 or aspect > 10:
                 continue
 
-            # Filter by size: banners are roughly 60-200px wide, 15-40px tall
-            if w < 40 or w > 300 or h < 10 or h > 50:
+            # White pixel density must be high (banner text is dense)
+            text_area = white_mask[y:y+h, x:x+w]
+            white_density = cv2.countNonZero(text_area) / max(w * h, 1)
+            if white_density < 0.15 or white_density > 0.7:
                 continue
 
-            # Check that the banner interior has white text pixels
-            banner_crop = gray[y:y+h, x:x+w]
-            white_ratio = np.sum(banner_crop > 200) / max(banner_crop.size, 1)
-            if white_ratio < 0.05:
+            # Step 3: Check the background color behind the white text
+            pad = 4
+            ey1 = max(0, y - pad)
+            ey2 = min(roi.shape[0], y + h + pad)
+            ex1 = max(0, x - pad)
+            ex2 = min(roi.shape[1], x + w + pad)
+            bg_region = roi[ey1:ey2, ex1:ex2]
+
+            bg_gray = gray[ey1:ey2, ex1:ex2]
+            bg_mask = (bg_gray < 180) & (bg_gray > 20)
+            if np.sum(bg_mask) < 30:
                 continue
 
-            banners.append((x, y, w, h))
+            bg_pixels = bg_region[bg_mask]
+            mean_bgr = tuple(bg_pixels.mean(axis=0).astype(int))
 
-        # Merge overlapping banners
-        banners = self._merge_overlapping(banners)
+            # Step 4: Banner background must be a saturated tribe color
+            hsv_bg = cv2.cvtColor(
+                np.uint8([[list(mean_bgr)]]), cv2.COLOR_BGR2HSV
+            )[0][0]
+
+            # Require meaningful saturation (>50) -- rejects fog, terrain, gray UI
+            # Exception: very dark colors (Bardur) with V < 60
+            if hsv_bg[1] < 50 and hsv_bg[2] > 60:
+                continue
+
+            banners.append((x, y, w, h, mean_bgr))
+
+        banners = self._merge_nearby(banners)
         return banners
 
-    def _merge_overlapping(self, boxes: list[tuple[int, int, int, int]]) -> list[tuple[int, int, int, int]]:
-        """Merge overlapping bounding boxes."""
-        if not boxes:
-            return boxes
+    def _merge_nearby(self, banners):
+        """Merge banners that are very close together."""
+        if len(banners) <= 1:
+            return banners
 
-        boxes = sorted(boxes, key=lambda b: (b[1], b[0]))
-        merged = [boxes[0]]
+        banners = sorted(banners, key=lambda b: (b[1], b[0]))
+        merged = [banners[0]]
 
-        for bx, by, bw, bh in boxes[1:]:
-            mx, my, mw, mh = merged[-1]
-            if (bx < mx + mw and bx + bw > mx and
-                by < my + mh and by + bh > my):
-                # Merge
-                nx = min(mx, bx)
-                ny = min(my, by)
-                nw = max(mx + mw, bx + bw) - nx
-                nh = max(my + mh, by + bh) - ny
-                merged[-1] = (nx, ny, nw, nh)
+        for b in banners[1:]:
+            last = merged[-1]
+            if (abs(b[0] - last[0]) < 30 and abs(b[1] - last[1]) < 20):
+                # Merge into the larger one
+                if b[2] * b[3] > last[2] * last[3]:
+                    merged[-1] = b
             else:
-                merged.append((bx, by, bw, bh))
+                merged.append(b)
 
         return merged
 
     def _read_banner_text(self, banner_roi: np.ndarray) -> tuple[str | None, int]:
-        """
-        OCR the banner to extract city name and population.
-        Returns (name, population). Population 0 means we couldn't read it.
-        """
-        if banner_roi.size == 0 or banner_roi.shape[0] < 5 or banner_roi.shape[1] < 10:
-            return None, 0
-
-        gray = cv2.cvtColor(banner_roi, cv2.COLOR_BGR2GRAY)
-        scaled = cv2.resize(gray, None, fx=3.0, fy=3.0, interpolation=cv2.INTER_CUBIC)
-        _, thresh = cv2.threshold(scaled, 200, 255, cv2.THRESH_BINARY)
-
-        try:
-            text = pytesseract.image_to_string(thresh, config='--psm 7').strip()
-        except Exception as e:
-            logger.debug(f"Banner OCR failed: {e}")
-            return None, 0
-
+        """OCR the banner to extract city name and population."""
+        text = self.ocr.ocr_roi(banner_roi, mode="alpha")
         if not text or len(text) < 2:
             return None, 0
 
         logger.debug(f"Banner raw text: '{text}'")
 
-        # Parse: "CityName *N" or "CityName ★N" or just "CityName"
-        # The star character is often misread as *, x, X, etc.
         population = 0
         name = text
 
-        pop_match = re.search(r'[\*\u2605xX]\s*(\d+)', text)
+        # Parse star population: "CityName ★N" or "CityName *N"
+        pop_match = re.search(r'[\*\u2605xX#]\s*(\d+)', text)
         if pop_match:
             population = int(pop_match.group(1))
             name = text[:pop_match.start()].strip()
 
-        # Also try just trailing digits
         if population == 0:
             trailing = re.search(r'\s+(\d+)\s*$', text)
             if trailing:
                 population = int(trailing.group(1))
                 name = text[:trailing.start()].strip()
 
-        # Clean up the name: only keep alphabetic chars and spaces
-        name = re.sub(r'[^a-zA-Z\s]', '', name).strip()
-        if not name or len(name) < 2:
+        name = re.sub(r'[^a-zA-Z\s\-]', '', name).strip()
+        if not name or len(name) < 4:
+            return None, 0
+
+        # Reject names that are mostly non-alphabetic noise
+        alpha_ratio = sum(c.isalpha() for c in name) / max(len(name), 1)
+        if alpha_ratio < 0.6:
             return None, 0
 
         return name, population
 
-    def _identify_tribe_from_banner(self, banner_roi: np.ndarray) -> str:
+    def _match_tribe_color(self, bgr: tuple) -> str:
         """
-        Determine which tribe owns a city by matching the banner's
-        dominant color against known tribe colors.
+        Match a BGR color against known tribe colors using HSV hue.
+        Hue is robust to transparency/blending effects in-game.
         """
-        if banner_roi.size == 0:
-            return "unknown"
+        from ..knowledge.tribes import tribe_knowledge
 
-        # Mask out white text pixels to get just the banner background color
-        gray = cv2.cvtColor(banner_roi, cv2.COLOR_BGR2GRAY)
-        bg_mask = gray < 180  # non-text pixels
-
-        if np.sum(bg_mask) < 10:
-            return "unknown"
-
-        mean_bgr = cv2.mean(banner_roi, mask=bg_mask.astype(np.uint8) * 255)[:3]
+        pixel = np.uint8([[list(bgr)]])
+        hsv = cv2.cvtColor(pixel, cv2.COLOR_BGR2HSV)[0][0]
+        hue, sat, val = int(hsv[0]), int(hsv[1]), int(hsv[2])
 
         best_tribe = "unknown"
-        best_dist = float('inf')
+        best_score = float('inf')
 
-        for tribe_name, ref_bgr in TRIBE_BANNER_BGR.items():
-            dist = sum((a - b) ** 2 for a, b in zip(mean_bgr, ref_bgr)) ** 0.5
-            if dist < best_dist:
-                best_dist = dist
+        for tribe_name, metadata in tribe_knowledge.tribes.items():
+            lo = metadata.color_range_hsv[0]
+            hi = metadata.color_range_hsv[1]
+
+            # Check if the hue falls within the tribe's range
+            h_lo, s_lo, v_lo = lo
+            h_hi, s_hi, v_hi = hi
+
+            h_center = (h_lo + h_hi) / 2
+            h_dist = min(abs(hue - h_center), 180 - abs(hue - h_center))
+
+            # Only consider if saturation is in reasonable range
+            if sat < max(s_lo - 30, 0):
+                continue
+
+            if h_dist < best_score:
+                best_score = h_dist
                 best_tribe = tribe_name
 
-        # Only accept if the match is reasonably close
-        if best_dist > 120:
-            logger.debug(f"Banner color {mean_bgr} too far from any tribe (dist={best_dist:.0f})")
+        if best_score > 25:
+            logger.debug(f"Banner HSV({hue},{sat},{val}) too far from any tribe (hue_dist={best_score:.0f})")
             return "unknown"
 
         return best_tribe

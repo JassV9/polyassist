@@ -7,6 +7,7 @@ class TribeMetadata:
         self.name = name
         self.starting_tech: str | None = data["starting_tech"]
         self.special_units: list[str] = data["special_units"]
+        self.color_hex: str = data.get("color_hex", "#000000")
         self.color_primary_hsv: tuple[int, int, int] = tuple(data["color_primary_hsv"])
         self.color_range_hsv: tuple[list[int], list[int]] = tuple(data["color_range_hsv"])
         self.terrain_bias: str = data["terrain_bias"]
